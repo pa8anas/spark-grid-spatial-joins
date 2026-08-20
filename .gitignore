@@ -1,0 +1,29 @@
+target/
+.idea/
+.vscode/
+*.iml
+.DS_Store
+*.log
+*.class
+*.jar
+*.out
+
+# Local datasets
+/data/*.csv
+/data/*.tsv
+/data/*.txt
+!/data/README.md
+
+# Spark/Hadoop local artifacts
+spark-warehouse/
+metastore_db/
+derby.log
+
+# LaTeX build artifacts
+report/*.aux
+report/*.bbl
+report/*.blg
+report/*.log
+report/*.out
+report/*.toc
+report/*.synctex.gz
