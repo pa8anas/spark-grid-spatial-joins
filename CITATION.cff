@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it using the metadata below."
+title: "Spark Grid-Based Spatial Joins"
+type: software
+authors:
+  - family-names: "Athanasopoulos"
+    given-names: "Panagiotis"
+year: 2026
+license: MIT
+repository-code: "https://github.com/pa8anas/spark-grid-spatial-joins"
+keywords:
+  - Apache Spark
+  - spatial joins
+  - geospatial data
+  - distributed computing
+  - grid-based indexing
