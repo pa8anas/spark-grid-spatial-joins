@@ -1,0 +1,308 @@
+% !TeX program = xelatex
+\documentclass[sigconf,nonacm]{acmart}
+
+\AtBeginDocument{\let\balance\relax}
+
+\usepackage{fontspec}
+\usepackage{tikz}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{polyglossia}
+\setmainfont{Libertinus Serif}
+\setmonofont{DejaVu Sans Mono}
+\setdefaultlanguage{english}
+\setotherlanguage{greek}
+
+\raggedbottom
+\setlength{\emergencystretch}{2em}
+\hbadness=10000
+
+\title{Spatial Joins with Grid-Based Indexing in Apache Spark}
+\author{Panagiotis Athanasopoulos}
+\affiliation{%
+  \institution{Department of Digital Systems, University of Piraeus}
+  \city{Athens}
+  \country{Greece}
+}
+\email{me2402@webmail.unipi.gr}
+
+\begin{abstract}
+This paper implements and evaluates spatial join algorithms using grid-based techniques in the distributed Apache Spark environment. The objective is to efficiently identify pairs of points from two datasets (RAILS and AREALM) that lie within a predefined distance threshold ($\epsilon$). The main implementation stages, experimental methodology, and results are presented, with emphasis on the accuracy and efficiency of the approach for different parameter values. The experimental results show that the grid-based approach effectively exploits Spark's computational resources and exhibits good scalability on large-volume datasets. In addition, the main challenges encountered during the development and execution of the algorithms are discussed.
+\end{abstract}
+
+\keywords{Distributed data processing, Apache Spark, spatial joins, grid-based indexing, big data, algorithm performance}
+
+\begin{CCSXML}
+<ccs2012>
+  <concept>
+    <concept_id>10002951.10003260.10003304</concept_id>
+    <concept_desc>Information systems~Spatial-temporal systems</concept_desc>
+    <concept_significance>500</concept_significance>
+  </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Information systems~Spatial-temporal systems}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+In the era of big data, the need for efficient management and processing of geospatial data is becoming increasingly important~\cite{aji2013hadoop}. Spatial queries, and spatial joins in particular, are among the fundamental tools for analyzing and extracting knowledge from geospatial datasets. However, the computational complexity of these operations increases substantially as the size and complexity of the data grow, making distributed processing systems such as Apache Spark necessary~\cite{spatialspark}.
+
+Spatial indexing based on grid-based methods offers a promising approach for accelerating spatial joins, since it partitions the space into smaller, manageable regions and thereby reduces the number of required comparisons~\cite{yu2015geospark}. This work studies the implementation and evaluation of a grid-based spatial join in Apache Spark, with the objective of improving performance and scalability when processing large volumes of geospatial data. 
+
+\section{Problem Definition}
+This work addresses the efficient processing of spatial queries over large geospatial datasets by exploiting distributed processing in Apache Spark. Specifically, two datasets, $R$ and $S$, are given, containing records that represent the geospatial locations of objects. Each record $r \in R$ (and correspondingly $s \in S$) is characterized by an object identifier (ID) and a position $(x, y)$, where $x$ and $y$ are geographic coordinates.
+
+The objective is to implement algorithms that answer the following two queries:
+
+\begin{itemize}
+    \item \textbf{Query A:} Find all pairs $(r, s)$ for which the Euclidean distance $dist(r, s)$ is less than or equal to an input threshold $\varepsilon$. The output is the number of pairs satisfying the distance constraint.
+    \item \textbf{Query B:} Find all records $r \in R$ that have more than $k$ records $s \in S$ within distance $\varepsilon$. The value $k$ is also an input parameter. The output is the subset of records $r$, together with the number of records $s$ lying within distance $\varepsilon$.
+\end{itemize}
+
+To execute the above queries, a parallel algorithm is designed and implemented in Apache Spark using Euclidean distance as the distance metric. The real-world data are obtained from the RAILS ($R$) and AREALM ($S$) datasets, which are subsets of the TIGER data and are provided in tab-separated format.
+
+
+\section{Related Work}
+A substantial body of research has focused on the efficient implementation of spatial joins over large geospatial datasets, both in traditional database systems and in distributed infrastructures~\cite{vu2024learning,shekhar2014spatial}. Classical approaches rely on spatial indexes such as R-trees, quadtrees, and grid-based structures in an effort to minimize the number of required comparisons~\cite{beckmann1990r}.
+
+At the distributed-systems level, several platforms and libraries have been proposed for implementing spatial operations while exploiting parallel processing, with prominent examples based on Hadoop and Spark~\cite{eldawy2015spatialhadoop,yu2015geospark}. Each approach has advantages and disadvantages in terms of complexity, scalability, and ease of integration into large-scale applications.
+
+The choice of grid-based indexing in this work is motivated by its implementation simplicity, its suitability for parallel processing, and its potential scalability compared with more complex indexing structures, particularly for real-world data with non-uniform distributions.
+
+
+\section{Methodology}
+Query A was implemented using parallel data processing in Apache Spark. The objective was to efficiently identify all point pairs $(r,s)$, where $r \in R$ and $s \in S$, whose Euclidean distance does not exceed the specified threshold $\epsilon$.
+
+\subsection*{Query A Implementation Steps}
+
+\textbf{1. Data loading and transformation:} 
+
+The two datasets ($R$ and $S$) are loaded as RDDs, and each line is converted into a Point object containing the identifier (ID) and geographic coordinates $(x, y)$. The data are filtered so that invalid or incomplete records are ignored.
+
+\textbf{2. Construction of the grid-based index:} \\
+The geographic space is divided into equal-sized cells, where the cell size is defined as $gridSize = \frac{\epsilon}{\sqrt{2}}$. This value is chosen so that candidate points whose Euclidean distance may be at most $\epsilon$ can be found in the same or neighboring cells.
+
+Each point is assigned not only to its own cell but also to the eight neighboring cells, i.e., to all cells in the $3\times3$ grid around the point. This addresses \textit{border effects}, in which point pairs near cell boundaries might otherwise not be examined if they fall into different cells.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[scale=1.2]
+    % Draw grid 3x3
+    \draw[step=1cm,gray,very thin] (0,0) grid (3,3);
+    
+    % Highlight center cell
+    \fill[blue!10] (1,1) rectangle (2,2);
+    
+    % Draw the central point
+    \filldraw[red] (1.5,1.5) circle (2.5pt);
+    
+    % Draw epsilon radius circle
+    \draw[red, dashed, thick] (1.5,1.5) circle (0.85cm);
+    
+    % Mark the 8 neighboring cells
+    \foreach \x in {0,1,2}{%
+        \foreach \y in {0,1,2}{%
+            \draw[black, thin] (\x,\y) rectangle (\x+1,\y+1);
+        }
+    }
+    
+    % Optional: Label cells
+    \node at (1.5,1.5) {\textbf{P}};
+    \node[scale=0.85] at (2.6,2.7) {cell};
+    \node[scale=0.85] at (0.5,2.5) {cell};
+    \node[scale=0.85] at (2.5,0.5) {cell};
+    \node[scale=0.85] at (0.5,0.5) {cell};
+    \node[scale=0.9, right, red] at (1.7,1.5) {$(x,y)$};
+    \node[scale=0.85, below] at (1.5,0) {$x$};
+    \node[scale=0.85, left] at (0,1.5) {$y$};
+
+    % Optional: Indicate epsilon
+    \draw[->, red, thick] (1.5,1.5) -- (2.35,1.5);
+    \node[red, above] at (1.95,1.52) {$\epsilon$};
+\end{tikzpicture}
+\caption{Example of grid-based partitioning: point $(x,y)$ (red) belongs to the central cell, while the region of radius $\epsilon$ intersects the eight neighboring cells.}\label{fig:grid-example}
+\Description{A three-by-three grid with a red point in the central cell and an epsilon-radius circle intersecting neighboring cells.}
+\end{figure}
+
+\textbf{3. Creation of key-value pairs and partitioning:} 
+
+Each point is mapped to one or more cells through key-value pairs (cellKey, point). The data are partitioned using a HashPartitioner to distribute the workload and exploit Spark parallelism. Each partition can therefore process data associated with the same cells independently.
+
+\textbf{4. Join and filtering of candidate pairs:} \\
+A join is performed between the RDDs containing the points of $R$ and $S$ using the cell key. For each candidate pair associated with the same cell through the multi-cell assignment, the Euclidean distance is computed. Only pairs satisfying $dist(r,s) \leq \epsilon$ are retained. Additional filtering is applied when necessary to eliminate duplicate or symmetric pairs.
+
+\begin{algorithm}[H]
+\caption{Basic spatial join algorithm with grid-based indexing}
+\begin{algorithmic}[1]
+\REQUIRE Point sets $R$, $S$ and distance threshold $\epsilon$
+\ENSURE All pairs $(r, s)$ such that $dist(r, s) \leq \epsilon$
+
+\STATE \textbf{Compute grid cell size:} $gridSize = \epsilon / \sqrt{2}$
+\FORALL{point $r$ in $R$}
+    \STATE Assign $r$ to all $3\times3$ neighboring grid cells (based on $gridSize$)
+\ENDFOR
+\FORALL{point $s$ in $S$}
+    \STATE Assign $s$ to all $3\times3$ neighboring grid cells (based on $gridSize$)
+\ENDFOR
+
+\STATE \textbf{For each cell:}
+\FORALL{cell $C$}
+    \STATE Retrieve $R_C$ and $S_C$: points from $R$ and $S$ assigned to cell $C$
+    \FORALL{$r \in R_C$}
+        \FORALL{$s \in S_C$}
+            \IF{$dist(r, s) \leq \epsilon$}
+                \STATE Output pair $(r, s)$ as result
+            \ENDIF
+        \ENDFOR
+    \ENDFOR
+\ENDFOR
+\end{algorithmic}
+\end{algorithm}
+
+
+\textbf{5. Result storage:} \\
+The pairs $(r, s)$ are stored as text, while for the purposes of the assignment only the number of pairs satisfying the distance criterion is returned. The final count is stored in a separate result file.
+
+\subsection*{Advantages of the Approach}
+
+The implementation exploits Spark parallelism and reduces the number of comparisons through grid-based indexing. This avoids an exhaustive brute-force distance computation over every possible point pair, improving the efficiency and scalability of the algorithm. The selected grid size is intended to preserve valid candidate pairs, while partitioning distributes the processing workload across the available computational resources.
+
+\subsection*{Query B Implementation Steps}
+
+Query B identifies all points $r \in R$ that have more than $k$ neighbors $s \in S$ within distance $\epsilon$. For each such point $r$, the required output is the number of neighboring points $s$ satisfying the spatial criterion. Apache Spark and grid-based spatial partitioning are used to execute the query on large datasets.
+
+ 
+\textbf{1. Data loading and preprocessing:} The data are loaded from HDFS as RDDs, and each line is converted into a Point object containing the identifier (ID) and coordinates $(x, y)$. Invalid or incomplete lines are then filtered out.
+    
+\textbf{2. Grid-based indexing:} The space is divided into equal-sized cells with side length $gridSize = \epsilon / \sqrt{2}$. To address border effects, each point is assigned both to its own cell and to its eight neighboring cells, forming a $3\times3$ cell neighborhood.
+    
+\textbf{3. Grouping points by cell:} The two datasets are mapped to key-value pairs using cellKey as the key, and a cogroup operation is then performed so that all $r$ and $s$ associated with each cell are grouped together.
+    
+\textbf{4. Identification of candidate pairs $(r, s)$:} For each cell, all possible $(r, s)$ pairs are generated. The Euclidean distance is computed for each pair, and the pair is retained if the distance does not exceed $\epsilon$.
+    
+\textbf{5. Avoiding overcounting:} Because the grid assignment may cause each $(r, s)$ pair to appear multiple times through different cells, a distinct operation is applied so that each pair is counted only once.
+    
+\textbf{6. Counting and filtering:} Each $r$ is associated with the number of distinct $s$ points found within $\epsilon$. Only those $r$ points having more than $k$ such neighbors are retained.
+    
+\textbf{7. Result storage:} The final output contains lines of the form $\{r.id,~count\}$, where $count$ is the number of $s$ points within $\epsilon$.
+
+The implementation avoids duplicate counting, exploits Spark parallelism, and supports the processing of large data volumes.
+
+\begin{algorithm}[H]
+\caption{Basic Query B algorithm with grid-based indexing}
+\begin{algorithmic}[1]
+\REQUIRE Point sets $R$, $S$; parameters $\epsilon$, $k$
+\ENSURE All $r \in R$ with $>k$ neighbors $s \in S$ such that $dist(r,s) \leq \epsilon$
+\STATE Assign all points $r \in R$ and $s \in S$ to their grid cell and 8 neighbors
+\STATE For each cell, collect $R_C$, $S_C$ (points from $R$, $S$ in cell $C$)
+\STATE For all $r \in R_C$, $s \in S_C$:
+    \STATE \hspace{1em} If $dist(r,s) \leq \epsilon$ add pair $(r.id, s.id)$
+\STATE Remove duplicate $(r.id, s.id)$ pairs
+\STATE For each $r$, count distinct $s$
+\STATE Filter $r$ with count $> k$
+\STATE Output $\{r.id, count\}$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Experiments and Results}
+\subsection{Experimental Procedure}
+The real-world RAILS and AREALM datasets were used to evaluate the implemented algorithm. They are subsets of the TIGER dataset and are provided in tab-separated format. The datasets contain 3,184,948 and 3,848,971 records, respectively.
+
+The algorithm was executed with 200 partitions, as specified by the HashPartitioner during grid-based data partitioning. Different values of the distance threshold $\epsilon$ were tested.
+
+\subsection{Evaluation Metrics}
+The main evaluation metrics were the execution time for each $\epsilon$ value and the number of $(r,s)$ pairs satisfying the spatial criterion. Execution time refers to the total time from job submission to completion, as reported by the YARN ResourceManager UI or by the wall-clock time of spark-submit.
+
+\subsection{Results}
+The Query A results show that as the distance threshold $\epsilon$ increases, both the number of detected $(r,s)$ pairs and the execution time increase substantially. For small $\epsilon$ values (e.g., 0.003), fewer pairs are identified and execution time remains relatively low. For larger values (e.g., 0.012), the number of results grows sharply and the processing time becomes considerably higher.
+
+This increase is expected because a larger $\epsilon$ expands the region examined around each point, producing more candidate pairs and requiring more distance comparisons. Consequently, the algorithm requires more computational resources and execution time.
+
+Overall, there is a clear trade-off between the number of results and performance: increasing $\epsilon$ allows more spatial relationships to be detected but also increases the computational cost.
+
+\begin{table}[t]
+\centering
+\caption{Results for different values of $\epsilon$}\label{tab:results}
+\begin{tabular}{ccc}
+\toprule
+$\epsilon$ & Number of pairs & Execution time (sec) \\
+\midrule
+0.012 & 41.927.160 & 900 \\
+0.008 & 18.819.585 &  511\\
+0.006 & 10.602.167 & 469 \\
+0.003 & 2.739.782 & 317 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Discussion}
+The grid-based algorithm reduces the number of comparisons relative to a brute-force approach by exploiting partitioning and Spark parallelism. However, for large values of $\epsilon$, the number of candidate pairs grows rapidly, negatively affecting response time. In addition, the selected number of partitions plays an important role in workload distribution.
+
+\subsection{Query B Experimental Procedure}
+The real-world RAILS and AREALM datasets, subsets of the TIGER dataset provided in tab-separated format, were used to evaluate Query B. RAILS contains 3,184,948 points, whereas AREALM contains 3,848,971 points.
+
+The implementation was executed in Apache Spark using 200 partitions and grid-based partitioning with cell size $gridSize = \epsilon / \sqrt{2}$. The algorithm was run for different values of $\epsilon$ and $k$, and the results were measured in terms of the number of points $r$ satisfying the spatial criterion and the job execution time.
+
+\subsection{Evaluation Metrics}
+The collected metrics were:
+\begin{itemize}
+    \item \textbf{Number of records $r$} having more than $k$ neighbors $s$ within distance $\epsilon$.
+    \item \textbf{Execution time} for each parameter combination.
+\end{itemize}
+
+\subsection{Results}
+The experimental results in Table 2 show that increasing $\epsilon$ substantially increases the number of records $r$ having more than $k$ neighbors within the $\epsilon$ distance. With larger $\epsilon$ values, each point $r$ includes more points from $S$ as neighbors, increasing both the number of $r$ records satisfying the query and the required computation time because more point pairs must be processed. Conversely, smaller $\epsilon$ values reduce both the result size and execution time.
+
+The parameter $k$, which specifies the minimum number of neighbors required for a point $r$ to be included in the output, directly affects the result size. Larger $k$ values impose a stricter criterion and therefore fewer points $r$ satisfy it, whereas smaller $k$ values relax the filter. Overall, $\epsilon$ and $k$ strongly influence both query efficiency and result volume, creating a trade-off between computational cost and result coverage.
+
+\begin{table}[t]
+\centering
+\caption{Query B results for different values of $\epsilon$ and $k$}\label{tab:results-queryb}
+\begin{tabular}{@{}ccrc@{}}
+\toprule
+$\epsilon$ & $k$ & \shortstack{Number of \\ records $r$} & \shortstack{Time \\ (sec)} \\
+\midrule
+0.006 & 200 & 1.282 & 469 \\
+0.006 & 100 & 9696 &  525 \\
+0.003 & 200 & 115 & 349 \\
+0.003 & 100 & 515 & 342 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Conclusions}
+This paper presented the implementation and evaluation of algorithms for efficiently executing spatial joins over large geospatial datasets using grid-based indexing techniques in Apache Spark. The experimental results demonstrate the behavior of the proposed method under different distance thresholds while preserving the required spatial-query results.
+
+In particular, the number of results and the required processing time depend strongly on the distance parameter $\epsilon$. For small $\epsilon$ values, the algorithm completes relatively quickly, whereas larger values produce a sharp increase in both the number of results and execution time because more candidate comparisons are generated.
+
+Future work could focus on further performance optimization, for example through dynamic grid-size selection or more sophisticated spatial indexes such as R-trees or quadtrees. Extending the implementation to support polygonal or spatio-temporal queries and evaluating it on even larger real-world datasets are also promising directions for future research.
+
+\section*{Appendix A: Spark Job Execution}
+
+\textbf{Execution command:}
+\begin{flushleft}
+\small\ttfamily
+spark-submit --class org.example.Main --master yarn \textbackslash\\
+--deploy-mode client --executor-memory 6g \textbackslash\\
+--num-executors 4 \textbackslash\\
+spark\_project-1.0-SNAPSHOT.jar \textbackslash\\
+hdfs:///user/hduser/input/RAILS.csv \textbackslash\\
+hdfs:///user/hduser/input/AREALM.csv \textbackslash\\
+hdfs:///user/hduser/output/resultsA/ 0.012
+\end{flushleft}
+
+\textbf{Note:}  
+The results are stored in HDFS at the path specified by the output argument.  
+Additional details about the jobs are included in the accompanying spark-jobs.txt file.
+
+
+
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{references}
+
+\end{document}
