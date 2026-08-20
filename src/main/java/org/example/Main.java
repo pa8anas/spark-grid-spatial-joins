@@ -33,14 +33,31 @@ public final class Main {
         String arealmPath = args[2];
         String outputPath = args[3];
         double epsilon = Double.parseDouble(args[4]);
-        int k = args.length >= 6 ? Integer.parseInt(args[5]) : 0;
-        int partitions = args.length >= 7 ? Integer.parseInt(args[6]) : DEFAULT_PARTITIONS;
+
+        int k = 0;
+        int partitions = DEFAULT_PARTITIONS;
+
+        if ("A".equals(query)) {
+            if (args.length >= 6) {
+                partitions = Integer.parseInt(args[5]);
+            }
+        } else if ("B".equals(query)) {
+            if (args.length < 6) {
+                throw new IllegalArgumentException("Query B requires k");
+            }
+            k = Integer.parseInt(args[5]);
+            if (args.length >= 7) {
+                partitions = Integer.parseInt(args[6]);
+            }
+        } else {
+            throw new IllegalArgumentException("Unknown query: " + query + ". Use A or B.");
+        }
 
         if (epsilon <= 0) {
             throw new IllegalArgumentException("epsilon must be > 0");
         }
-        if ("B".equals(query) && args.length < 6) {
-            throw new IllegalArgumentException("Query B requires k");
+        if (partitions <= 0) {
+            throw new IllegalArgumentException("partitions must be > 0");
         }
 
         SparkConf conf = new SparkConf().setAppName("SparkGridSpatialJoins");
@@ -51,10 +68,8 @@ public final class Main {
 
             if ("A".equals(query)) {
                 runQueryA(sc, rails, arealm, outputPath, epsilon, partitions);
-            } else if ("B".equals(query)) {
-                runQueryB(rails, arealm, outputPath, epsilon, k, partitions);
             } else {
-                throw new IllegalArgumentException("Unknown query: " + query + ". Use A or B.");
+                runQueryB(rails, arealm, outputPath, epsilon, k, partitions);
             }
         }
     }
