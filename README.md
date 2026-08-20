@@ -6,7 +6,7 @@ A distributed geospatial processing project for **grid-based spatial joins with 
 
 Spatial joins are computationally expensive because a naive implementation may compare every point in one dataset with every point in the other. This project reduces the search space by partitioning geographic space into grid cells and evaluating candidate point pairs associated with common grid keys.
 
-The repository is based on an academic project developed at the University of Piraeus. The Java source under `src/` is a clean baseline implementation reconstructed from the algorithm and execution procedure documented in the project report; it is intended to reproduce the reported design rather than claim byte-for-byte identity with the original coursework source.
+The repository is based on an academic project developed at the University of Piraeus. The original Java files uploaded for the project are preserved unchanged at the repository root as `Main.java` and `MainB.java`. For easier navigation, identical copies are also grouped under [`source/original/`](source/original/).
 
 ## Queries
 
@@ -40,7 +40,7 @@ The report defines the cell size as:
 gridSize = epsilon / sqrt(2)
 ```
 
-The baseline implementation assigns points to their own grid cell and the eight neighboring cells to address boundary effects. Spark key-value transformations, `HashPartitioner`, joins, Euclidean-distance filtering, and duplicate removal are then used to compute the final results.
+The implementation assigns points to their own grid cell and the eight neighboring cells to address boundary effects. Spark key-value transformations, `HashPartitioner`, joins/cogroups, Euclidean-distance filtering, and duplicate removal are then used to compute the final results.
 
 ## Datasets
 
@@ -85,7 +85,13 @@ Raw result tables are available under [`results/`](results/).
 
 ```text
 spark-grid-spatial-joins/
-├── .github/workflows/maven.yml
+├── Main.java                     # original uploaded source
+├── MainB.java                    # original uploaded source
+├── source/
+│   └── original/
+│       ├── README.md
+│       ├── Main.java             # mirrored copy for organization
+│       └── MainB.java            # mirrored copy for organization
 ├── data/
 │   └── README.md
 ├── docs/
@@ -93,18 +99,12 @@ spark-grid-spatial-joins/
 │   └── performance-notes.md
 ├── report/
 │   ├── README.md
-│   ├── references.bib
-│   └── spatial-joins-spark-report-en.tex
+│   ├── spatial-joins-spark-report-en.pdf
+│   └── spatial-joins-spark-report-el.pdf
 ├── results/
 │   ├── README.md
 │   ├── query_a_results.csv
 │   └── query_b_results.csv
-├── scripts/
-│   ├── run-query-a.sh
-│   └── run-query-b.sh
-├── src/main/java/org/example/
-│   ├── Main.java
-│   └── Point.java
 ├── .gitignore
 ├── CITATION.cff
 ├── LICENSE
@@ -112,67 +112,24 @@ spark-grid-spatial-joins/
 └── README.md
 ```
 
-## Build
+## Source Code Notes
 
-Requirements:
+The original uploaded Java files contain multiple implementation iterations, including commented-out versions and later active versions. They are intentionally preserved rather than rewritten, so the repository reflects the actual coursework development history.
 
-- Java 11
-- Maven
-- Apache Spark 3.x
-- Hadoop/HDFS and YARN for the cluster execution shown in the report
-
-Build the project with:
-
-```bash
-mvn clean package
-```
-
-A GitHub Actions workflow also checks the Maven build on pushes and pull requests.
-
-## Running
-
-Query A:
-
-```bash
-spark-submit \
-  --class org.example.Main \
-  --master yarn \
-  --deploy-mode client \
-  --executor-memory 6g \
-  --num-executors 4 \
-  target/spark-grid-spatial-joins-1.0-SNAPSHOT.jar \
-  A <RAILS_PATH> <AREALM_PATH> <OUTPUT_PATH> <EPSILON> [PARTITIONS]
-```
-
-Query B:
-
-```bash
-spark-submit \
-  --class org.example.Main \
-  --master yarn \
-  --deploy-mode client \
-  --executor-memory 6g \
-  --num-executors 4 \
-  target/spark-grid-spatial-joins-1.0-SNAPSHOT.jar \
-  B <RAILS_PATH> <AREALM_PATH> <OUTPUT_PATH> <EPSILON> <K> [PARTITIONS]
-```
-
-Ready-to-edit examples are available in [`scripts/`](scripts/).
+For a cleaner production-style version, the next step would be to extract the final active implementations into a standard Maven layout such as `src/main/java/org/example/`, while keeping the original files archived unchanged under `source/original/`.
 
 ## Performance Considerations
 
-The baseline design has several important optimization opportunities: reducing unnecessary 3x3 replication, avoiding an expensive global `distinct()` when possible, replicating only one side of the join, investigating spatial skew, and performing systematic scalability experiments over Spark partitions and executors.
+The current design has several important optimization opportunities: reducing unnecessary 3x3 replication, avoiding an expensive global `distinct()` when possible, replicating only one side of the join, investigating spatial skew, and performing systematic scalability experiments over Spark partitions and executors.
 
 These limitations and a concrete improvement plan are documented in [`docs/performance-notes.md`](docs/performance-notes.md).
 
 ## Report
 
-The English LaTeX source is available at [`report/spatial-joins-spark-report-en.tex`](report/spatial-joins-spark-report-en.tex). The compiled reports can be added to `report/` using these names:
+The compiled reports are available in [`report/`](report/):
 
-```text
-spatial-joins-spark-report-en.pdf
-spatial-joins-spark-report-el.pdf
-```
+- [`spatial-joins-spark-report-en.pdf`](report/spatial-joins-spark-report-en.pdf) — English version
+- [`spatial-joins-spark-report-el.pdf`](report/spatial-joins-spark-report-el.pdf) — Greek version
 
 ## Technologies
 
